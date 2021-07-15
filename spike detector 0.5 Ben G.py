@@ -23,9 +23,13 @@ graph_size = (120,12) # Dimensions of the output graph image file. Not sure what
 
 #stim_trial_numbers = [21, 87, 151, 203, 267, 331] #Enter the trial numbers that stim trains occur in (see NAC file)
 stim_trial_numbers = [35, 119, 183, 243, 325, 387]  #Enter the trial numbers that stim trains occur in (see NAC file)
+#stim_trial_numbers = [35]
 
 pre_n_trials = 9
 post_n_trials = 15
+#pre_n_trials = 1
+#post_n_trials = 1
+
 
 n_channels = 2 #The number of recording channels, choose 1 or 2.
     
@@ -376,10 +380,6 @@ def stim_period(stim_mids): #Returns the mean period between stim spikes
 def spike_stats(stim_mids, starts): #returns spike_id (which stim spike the spike proceeds), and isi_list
     #Generate spike ID's...:
     #append stim_mids with a virtual extra stim to categorize "post" spikes
-    '''if len(stim_mids) > 0:
-        pass
-    else:
-        stim_mids = [0, 0]'''
     stim_mids2=stim_mids
     if len(stim_mids) > 1: #If there's more than one stim. If there isn't, it's probably a baseline trial ;)
         stim_mids2.append(stim_mids[-1]+(stim_mids[-1]-stim_mids[-2])) #adds an extra category for post stim train spikes, which start one inter-stim interval after last spike.
@@ -398,12 +398,7 @@ def spike_stats(stim_mids, starts): #returns spike_id (which stim spike the spik
         for ID in spike_ids:
             if ID == j:
                 spikes_per_stim[i] += 1    
-    '''for i in range(len(spike_ids)): #not working ... do this instead at the worksheet write step
-        if spike_ids[i] == 0:
-            spike_ids[i] = "pre"
-        elif spike_ids[i] == len(stim_mids):
-            spike_ids[i] = "post"
-    print("spike_ids")'''
+    
     if len(spike_ids) == 0: #If no spikes were detected, need spike_ids to be not empty.
         spike_ids = 0    
 
@@ -412,23 +407,26 @@ def spike_stats(stim_mids, starts): #returns spike_id (which stim spike the spik
     av_isi_per_stim = [] #len n_stim_spikes+2 (inc pre und post)
     sd_isi_per_stim = []
     isi_indices = []
-    isi_per_stim = []
-    print("######### Length stim mids",len(stim_mids))
-    print("#########  stim mids", stim_mids)
+    #isi_per_stim = []
+    #print("######### Length stim mids",len(stim_mids))
+    #print("#########  stim mids", stim_mids)
 
     if len(stim_mids) > 0:
         for j in range(len(stim_mids)+1):
+            isi_per_stim = []
+            isi_indices = []
             for i in range(len(spike_ids)):
                 if spike_ids[i] == j:
                     isi_indices.append(i)
             [isi_per_stim.append(isi_list[k]) for k in isi_indices if isi_list[k] != 0]
             try:
+                #print("Debug, ISIs per stim #", j, " ",isi_per_stim)
                 av_isi_per_stim.append(stats.mean(isi_per_stim))
-            except:
+            except: #If there are no ISIs in this bin?
                 av_isi_per_stim.append(0)
             try:
                 sd_isi_per_stim.append(stats.stdev(isi_per_stim))
-            except:
+            except: #If there are no ISIs in this bin?
                 sd_isi_per_stim.append(0)
     else:
         sd_isi_per_stim = stats.stdev(isi_per_stim)
@@ -445,11 +443,12 @@ def spike_stats(stim_mids, starts): #returns spike_id (which stim spike the spik
     starts_bin_counts = np.digitize(starts_sec, start_t_bins, True) 
     #print("starts_bin_counts",starts_bin_counts)
     starts_per_bin = [0] * (max(starts_bin_counts)+1)
-    for i in range(max(starts_bin_counts)+1):        
+    for i in range(max(starts_bin_counts)+1):
         for ID in starts_bin_counts:
             if ID == i:
                 starts_per_bin[i] += 1    
     #print("starts_per_bin",starts_per_bin)
+    starts_per_bin[0] -= 1 #Adjust first starts per bin bcoz it one too many
     spike_stats_["start_t_bins"] = start_t_bins
     spike_stats_["starts_per_bin"] = starts_per_bin
 
@@ -459,9 +458,12 @@ def spike_stats(stim_mids, starts): #returns spike_id (which stim spike the spik
     for i in range(len(starts_per_bin)): #other method: use bin counts as index iterator.
         isi_start_index = ticker
         isi_end_index = ticker + starts_per_bin[i]
-        av_isi = stats.mean(isi_list[isi_start_index:isi_end_index])
         #print("DEBUG: isi_start_index", isi_start_index, "; isi_end_index", isi_end_index, "; ticker", ticker)
         #print("DEBUG: starts per bin", starts_per_bin[i])
+        try:        
+            av_isi = stats.mean(isi_list[isi_start_index:isi_end_index])
+        except:
+            av_isi = 0 #If there's no spikes in this bin
         ticker += starts_per_bin[i]
         isi_per_bin.append(av_isi)
     #print("ISI PER BIN",isi_per_bin)
@@ -773,7 +775,7 @@ Run = "yes"
 #!!!! Graph title =  Trial number and threshold.
 start_time = time.time()
 
-'''
+''' #Old way of pre-stim-post assignment... delet?
 trial_numbers = []
 trial_tags = {} #Dictionary 
 experiment_counter = 1
@@ -893,12 +895,11 @@ while Run == "yes":
                 raw_unblanked_sig = np.array(y_values)
                 
                 stim_starts, stim_stops, stim_widths, stim_n_spikes = stim_train_detect(y_values,stim_peak) # Generate stim_starts etc.
-                if not trial_number in stim_trial_numbers and len(stim_starts) > 0:
-                    print("THIS IS NOT A STIM TRIAL")
-                    stim_starts = stim_starts[0]
-                    stim_stops = stim_stops[0]
-                    stim_widths = stim_widths[0]
-                    stim_n_spikes = stim_n_spikes[0]
+                if not trial_number in stim_trial_numbers: #if it not stim trial , we don't care about stims
+                    stim_starts = [0]
+                    stim_stops = [0]
+                    stim_widths = [0]
+                    stim_n_spikes = 1
                 y_values, stim_blank_starts, stim_blank_stops, stim_midpoints = remove_stim_artefacts(stim_starts, stim_stops, y_values) # Remove stim artefact from signal
                 y_values, epsp_starts, epsp_stops = remove_epsps(stim_starts, stim_stops, y_values) #remove EPSP from signal
                 epsp_starts = [0]
